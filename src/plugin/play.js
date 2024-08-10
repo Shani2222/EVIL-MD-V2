@@ -1,7 +1,7 @@
 import ytSearch from 'yt-search';
 import pkg from '@whiskeysockets/baileys';
 const { generateWAMessageFromContent, proto, prepareWAMessageMedia } = pkg;
-import ytdl from 'ytdl-core';
+import ytdl from 'wasitech';
 
 const searchResultsMap = new Map();
 let searchIndex = 1;
@@ -34,7 +34,7 @@ const playcommand = async (m, Matrix) => {
     }
 
     try {
-      await m.React("🕘");
+      await m.React("🎥");
 
       const searchResults = await ytSearch(text);
       const videos = searchResults.videos.slice(0, 5);
