@@ -1,12 +1,14 @@
 import ytSearch from 'yt-search';
+import fetch from 'node-fetch';
 import pkg from '@whiskeysockets/baileys';
 const { generateWAMessageFromContent, proto, prepareWAMessageMedia } = pkg;
-import ytdl from '@distube/ytdl-core';
+import axios from 'axios'; // Import axios for API requests
+
 
 const searchResultsMap = new Map();
 let searchIndex = 1;
 
-const playcommand = async (m, Matrix) => {
+const videocommand = async (m, Matrix) => {
   let selectedListId;
   const selectedButtonId = m?.message?.templateButtonReplyMessage?.selectedId;
   const interactiveResponseMessage = m?.message?.interactiveResponseMessage;
@@ -18,7 +20,6 @@ const playcommand = async (m, Matrix) => {
       selectedListId = params.id;
     }
   }
-
   const selectedId = selectedListId || selectedButtonId;
 
   const prefixMatch = m.body.match(/^[\\/!#.]/);
@@ -26,16 +27,16 @@ const playcommand = async (m, Matrix) => {
   const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
   const text = m.body.slice(prefix.length + cmd.length).trim();
 
-  const validCommands = ['play'];
+  const validCommands = ['play', 'song', 'music', 'ytadoc', 'ytmp3doc', 'sing', 'dlsong'];
 
   if (validCommands.includes(cmd)) {
     if (!text) {
-      return m.reply('*Please provide a search query*');
+      return m.reply(`Hello *_${m.pushName}_,*\nPlease provide a song name or search query eg *.play Spectre*`);
     }
 
     try {
-      await m.React("🎥");
-
+      await m.React("🕘");
+      await m.reply(`A moment, *Gifted-Md* is Processing from GiftedAPi...`);
       const searchResults = await ytSearch(text);
       const videos = searchResults.videos.slice(0, 5);
 
@@ -55,43 +56,34 @@ const playcommand = async (m, Matrix) => {
         {
           "name": "quick_reply",
           "buttonParamsJson": JSON.stringify({
-            display_text: "🎧 AUDIO",
+            display_text: "🎧 ᴀᴜᴅɪᴏ",
             id: `media_audio_${searchIndex}`
           })
         },
         {
           "name": "quick_reply",
           "buttonParamsJson": JSON.stringify({
-            display_text: "🎥 VIDEO",
-            id: `media_video_${searchIndex}`
-          })
-        },
-        {
-          "name": "quick_reply",
-          "buttonParamsJson": JSON.stringify({
-            display_text: "🎵 AUDIO DOCUMENT",
+            display_text: "🎵 ᴀᴜᴅɪᴏ ᴅᴏᴄᴜᴍᴇɴᴛ",
             id: `media_audiodoc_${searchIndex}`
           })
         },
         {
           "name": "quick_reply",
           "buttonParamsJson": JSON.stringify({
-            display_text: "🎦 VIDEO DOCUMENT",
-            id: `media_videodoc_${searchIndex}`
-          })
-        },
-        {
-          "name": "quick_reply",
-          "buttonParamsJson": JSON.stringify({
-            display_text: "⏩ NEXT",
+            display_text: "⏩ sᴇᴀʀᴄʜ ɴᴇxᴛ",
             id: `next_${searchIndex + 1}`
+          })
+        }, 
+        {
+          name: "cta_url",
+          buttonParamsJson: JSON.stringify({
+            display_text: "sʜᴏᴡ 💜 ғᴏʀ ɢɪғᴛᴇᴅ",
+            url: `https://whatsapp.com/channel/0029VaYauR9ISTkHTj4xvi1l`
           })
         }
       ];
 
       const thumbnailUrl = currentResult.thumbnail;
-      const url = `https://www.youtube.com/watch?v=${currentResult.videoId}`;
-
       const msg = generateWAMessageFromContent(m.from, {
         viewOnceMessage: {
           message: {
@@ -101,17 +93,10 @@ const playcommand = async (m, Matrix) => {
             },
             interactiveMessage: proto.Message.InteractiveMessage.create({
               body: proto.Message.InteractiveMessage.Body.create({
-                text: `*_ᴇᴠɪʟ-ᴍᴅ ʏᴏᴜᴛᴜʙᴇ sᴇᴀʀᴄʜ_*🔎
-╭────────────────────━┈⊷
-│▸ℹ️ *TITLE:*  ${currentResult.title}
-│▸👤 *AUTHOR:* ${currentResult.author.name}
-│▸👁️‍🗨️ *VIEWS:* ${currentResult.views}
-│▸🕘 *DURATION:* ${currentResult.timestamp}
-│▸🔗 *YTLINK:* ${url}
-╰────────────────────━┈⊷`
+                text: `*𝐆𝐈𝐅𝐓𝐄𝐃-𝐌𝐃 𝐒𝐎𝐍𝐆 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐑*\n\n*Tittle:* ${currentResult.title}\n*Artist:* ${currentResult.author.name}\n*Views:* ${currentResult.views}\n*Duration:* ${currentResult.timestamp}\n*User:* *_${m.pushName}_,*\n`
               }),
               footer: proto.Message.InteractiveMessage.Footer.create({
-                text: "*_───•◈ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴇᴠɪʟ ᴍᴅ²⁰²⁴◈•───_*"
+                text: "> *©𝟐𝟎𝟐𝟒 𝐆𝐈𝐅𝐓𝐄𝐃 𝐌𝐃 𝐕𝟓*"
               }),
               header: proto.Message.InteractiveMessage.Header.create({
                 ...(await prepareWAMessageMedia({ image: { url: thumbnailUrl } }, { upload: Matrix.waUploadToServer })),
@@ -126,23 +111,21 @@ const playcommand = async (m, Matrix) => {
               contextInfo: {
                 mentionedJid: [m.sender],
                 forwardingScore: 9999,
-                isForwarded: true,
+                isForwarded: false,
               }
             }),
           },
         },
       }, {});
-
       await Matrix.relayMessage(msg.key.remoteJid, msg.message, {
         messageId: msg.key.id
       });
       await m.React("✅");
-
       searchIndex += 1;
     } catch (error) {
       console.error("Error processing your request:", error);
-      m.reply('Download your request.✅');
-      await m.React("✅");
+      m.reply('Error processing your request.');
+      await m.React("❌");
     }
   } else if (selectedId) {
     if (selectedId.startsWith('next_')) {
@@ -156,43 +139,34 @@ const playcommand = async (m, Matrix) => {
         {
           "name": "quick_reply",
           "buttonParamsJson": JSON.stringify({
-            display_text: "🎧 AUDIO",
-            id: `media_audio_${nextIndex}`
+            display_text: "🎧 ᴀᴜᴅɪᴏ",
+            id: `media_audio_${searchIndex}`
+          })
+        },
+                {
+          "name": "quick_reply",
+          "buttonParamsJson": JSON.stringify({
+            display_text: "🎵 ᴀᴜᴅɪᴏ ᴅᴏᴄᴜᴍᴇɴᴛ",
+            id: `media_audiodoc_${searchIndex}`
           })
         },
         {
           "name": "quick_reply",
           "buttonParamsJson": JSON.stringify({
-            display_text: "🎥 VIDEO",
-            id: `media_video_${nextIndex}`
-          })
-        },
-        {
-          "name": "quick_reply",
-          "buttonParamsJson": JSON.stringify({
-            display_text: "🎵 AUDIO DOCUMENT",
-            id: `media_audiodoc_${nextIndex}`
-          })
-        },
-        {
-          "name": "quick_reply",
-          "buttonParamsJson": JSON.stringify({
-            display_text: "🎦 VIDEO DOCUMENT",
-            id: `media_videodoc_${nextIndex}`
-          })
-        },
-        {
-          "name": "quick_reply",
-          "buttonParamsJson": JSON.stringify({
-            display_text: "⏩ NEXT",
+            display_text: "⏩ sᴇᴀʀᴄʜ ɴᴇxᴛ",
             id: `next_${nextIndex + 1}`
+          })
+        },
+        {
+          name: "cta_url",
+          buttonParamsJson: JSON.stringify({
+            display_text: "sʜᴏᴡ 💜 ғᴏʀ ɢɪғᴛᴇᴅ",
+            url: `https://whatsapp.com/channel/0029VaYauR9ISTkHTj4xvi1l`
           })
         }
       ];
 
       const thumbnailUrl = currentResult.thumbnail;
-      const url = `https://www.youtube.com/watch?v=${currentResult.videoId}`;
-
       const msg = generateWAMessageFromContent(m.from, {
         viewOnceMessage: {
           message: {
@@ -202,17 +176,10 @@ const playcommand = async (m, Matrix) => {
             },
             interactiveMessage: proto.Message.InteractiveMessage.create({
               body: proto.Message.InteractiveMessage.Body.create({
-                text: `*_ᴇᴠɪʟ-ᴍᴅ ʏᴏᴜᴛᴜʙᴇ sᴇᴀʀᴄʜ_*🔎
-╭────────────────────━┈⊷
-│▸ℹ️ *TITLE:*  ${currentResult.title}
-│▸👤 *AUTHOR:* ${currentResult.author.name}
-│▸👁️‍🗨️ *VIEWS:* ${currentResult.views}
-│▸🕘 *DURATION:* ${currentResult.timestamp}
-│▸🔗 *YTLINK:* ${url}
-╰────────────────────━┈⊷`
+                text: `*𝐆𝐈𝐅𝐓𝐄𝐃-𝐌𝐃 𝐒𝐎𝐍𝐆 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐑*\n\n*Tittle:* ${currentResult.title}\n*Artist:* ${currentResult.author.name}\n*Views:* ${currentResult.views}\n*Duration:* ${currentResult.timestamp}\n*User:* *_${m.pushName}_,*\n`
               }),
               footer: proto.Message.InteractiveMessage.Footer.create({
-                text: "*_───•◈ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴇᴠɪʟ ᴍᴅ²⁰²⁴◈•───_*"
+                text: "> *©𝟐𝟎𝟐𝟒 𝐆𝐈𝐅𝐓𝐄𝐃 𝐌𝐃 𝐕𝟓*"
               }),
               header: proto.Message.InteractiveMessage.Header.create({
                 ...(await prepareWAMessageMedia({ image: { url: thumbnailUrl } }, { upload: Matrix.waUploadToServer })),
@@ -227,91 +194,104 @@ const playcommand = async (m, Matrix) => {
               contextInfo: {
                 mentionedJid: [m.sender],
                 forwardingScore: 9999,
-                isForwarded: true,
+                isForwarded: false,
               }
             }),
           },
         },
       }, {});
-
       await Matrix.relayMessage(msg.key.remoteJid, msg.message, {
         messageId: msg.key.id
       });
     } else if (selectedId.startsWith('media_')) {
-      const parts = selectedId.split('_');
+            const parts = selectedId.split('_');
       const type = parts[1];
       const key = parseInt(parts[2]);
       const selectedMedia = searchResultsMap.get(key);
 
       if (selectedMedia) {
-        try {
-          const videoUrl = selectedMedia.url;
-          let finalMediaBuffer, mimeType, content;
+  try {
+    const videoUrl = selectedMedia.url;
 
-          const stream = ytdl(videoUrl, { filter: type === 'audio' || type === 'audiodoc' ? 'audioonly' : 'videoandaudio' });
+    // Fetch the audio URL from the API
+    const apiResponse = await fetch(`https://api.prabath-md.tech/api/ytmp3?url=${encodeURIComponent(videoUrl)}`);
+    const apiResult = await apiResponse.json();
 
-          finalMediaBuffer = await getStreamBuffer(stream);
-          mimeType = type === 'audio' || type === 'audiodoc' ? 'audio/mpeg' : 'video/mp4';
+    if (apiResult.status !== 'success ✅') {
+      throw new Error('Failed to fetch audio URL');
+    }
 
-          if (type === 'audio') {
-            content = {
-              audio: finalMediaBuffer,
-              mimetype: 'audio/mpeg',
-              ptt: false,
-              waveform: [100, 0, 100, 0, 100, 0, 100],
-              fileName: `${selectedMedia.title}.mp3`,
-              contextInfo: {
-                mentionedJid: [m.sender],
-                externalAdReply: {
-                  title: "↺ |◁   II   ▷|   ♡",
-                  body: `Now playing: ${selectedMedia.title}`,
-                  thumbnailUrl: selectedMedia.thumbnail,
-                  sourceUrl: videoUrl,
-                  mediaType: 1,
-                  renderLargerThumbnail: true
-                }
-              }
-            };
-            await Matrix.sendMessage(m.from, content, { quoted: m });
-          } else if (type === 'video') {
-            content = {
-              video: finalMediaBuffer,
-              mimetype: mimeType,
-              caption: `╭────────────────────━┈⊷
-│▸ℹ️ *TITLE:* ${selectedMedia.title}
-╰────────────────────━┈⊷> *_───•◈ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴇᴠɪʟ ᴍᴅ²⁰²⁴◈•───_*`
-            };
-            await Matrix.sendMessage(m.from, content, { quoted: m });
-          } else if (type === 'audiodoc' || type === 'videodoc') {
-            content = {
-              document: finalMediaBuffer,
-              mimetype: mimeType,
-              fileName: `${selectedMedia.title}.${type === 'audiodoc' ? 'mp3' : 'mp4'}`,
-              caption: `> *_───•◈ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴇᴠɪʟ ᴍᴅ²⁰²⁴◈•───_*`,
-              contextInfo: {
-                externalAdReply: {
-                  showAdAttribution: true,
-                  title: selectedMedia.title,
-                  body: 'EVIL-MD',
-                  thumbnailUrl: selectedMedia.thumbnail,
-                  sourceUrl: selectedMedia.url,
-                  mediaType: 1,
-                  renderLargerThumbnail: true
-                }
-              }
-            };
-            await Matrix.sendMessage(m.from, content, { quoted: m });
+    const audioUrl = apiResult.data.download;
+    let mimeType, content;
+
+    if (type === 'audio') {
+      mimeType = 'audio/mpeg';
+      content = {
+        audio: { url: audioUrl },
+        mimetype: mimeType,
+        caption: `NORMAL AUDIO FORMAT\n\n> *©𝟐𝟎𝟐𝟒 𝐆𝐈𝐅𝐓𝐄𝐃 𝐌𝐃 𝐕𝟓*`,
+        contextInfo: {
+          externalAdReply: {
+            showAdAttribution: false,
+            title: selectedMedia.title,
+            body: 'Powered by Gifted Tech',
+            thumbnailUrl: 'https://telegra.ph/file/c2a4d8d65722553da4c89.jpg',
+            sourceUrl: 'https://whatsapp.com/channel/0029VaYauR9ISTkHTj4xvi1l',
+            mediaType: 1,
+            renderLargerThumbnail: false
           }
-        } catch (error) {
+        }
+      };
+    } else if (type === 'video') {
+      mimeType = 'video/mp4';
+      content = {
+        video: { url: audioUrl },
+        mimetype: mimeType,
+        caption: `\n> *©𝟐𝟎𝟐𝟒 𝐆𝐈𝐅𝐓𝐄𝐃 𝐌𝐃 𝐕𝟓*`,
+        contextInfo: {
+          externalAdReply: {
+            showAdAttribution: false,
+            title: selectedMedia.title,
+            body: 'Powered by Gifted Tech',
+            thumbnailUrl: 'https://telegra.ph/file/c2a4d8d65722553da4c89.jpg',
+            sourceUrl: 'https://whatsapp.com/channel/0029VaYauR9ISTkHTj4xvi1l',
+            mediaType: 1,
+            renderLargerThumbnail: false
+          }
+        }
+      };
+    } else if (type === 'audiodoc' || type === 'videodoc') {
+      mimeType = type === 'audiodoc' ? 'audio/mpeg' : 'video/mp4';
+      content = {
+        document: { url: audioUrl },
+        mimetype: mimeType,
+        fileName: `${selectedMedia.title}.${type === 'audiodoc' ? 'mp3' : 'mp4'}`,
+        caption: `\n\n> *©𝟐𝟎𝟐𝟒 𝐆𝐈𝐅𝐓𝐄𝐃 𝐌𝐃 𝐕𝟓*`,
+        contextInfo: {
+          externalAdReply: {
+            showAdAttribution: false,
+            title: selectedMedia.title,
+            body: 'Powered by Gifted Tech',
+            thumbnailUrl: 'https://telegra.ph/file/c2a4d8d65722553da4c89.jpg',
+            sourceUrl: 'https://whatsapp.com/channel/0029VaYauR9ISTkHTj4xvi1l',
+            mediaType: 1,
+            renderLargerThumbnail: false
+          }
+        }
+      };
+    }
+
+    await Matrix.sendMessage(m.from, content, { quoted: m });
+    m.reply(`Success...\nAudio: *${selectedMedia.title}* Downloaded`);
+  } catch (error) {
           console.error("Error processing your request:", error);
-          m.reply('Download your request.');
-          await m.React("✅");
+          m.reply('Error processing your request.');
+          await m.React("❌");
         }
       }
     }
   }
 };
-
 const getStreamBuffer = async (stream) => {
   const chunks = [];
   return new Promise((resolve, reject) => {
@@ -321,4 +301,4 @@ const getStreamBuffer = async (stream) => {
   });
 };
 
-export default playcommand;
+export default videocommand;
