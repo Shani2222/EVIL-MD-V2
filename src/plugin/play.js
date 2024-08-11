@@ -1,126 +1,324 @@
-import fetch from 'node-fetch';
-import yts from 'yt-search';
+import ytSearch from 'yt-search';
+import pkg from '@whiskeysockets/baileys';
+const { generateWAMessageFromContent, proto, prepareWAMessageMedia } = pkg;
+import ytdl from '@distube/ytdl-core';
 
-const Play = async (m, Gifted) => {
+const searchResultsMap = new Map();
+let searchIndex = 1;
+
+const playcommand = async (m, Matrix) => {
+  let selectedListId;
+  const selectedButtonId = m?.message?.templateButtonReplyMessage?.selectedId;
+  const interactiveResponseMessage = m?.message?.interactiveResponseMessage;
+
+  if (interactiveResponseMessage) {
+    const paramsJson = interactiveResponseMessage.nativeFlowResponseMessage?.paramsJson;
+    if (paramsJson) {
+      const params = JSON.parse(paramsJson);
+      selectedListId = params.id;
+    }
+  }
+
+  const selectedId = selectedListId || selectedButtonId;
+
   const prefixMatch = m.body.match(/^[\\/!#.]/);
   const prefix = prefixMatch ? prefixMatch[0] : '/';
   const cmd = m.body.startsWith(prefix) ? m.body.slice(prefix.length).split(' ')[0].toLowerCase() : '';
   const text = m.body.slice(prefix.length + cmd.length).trim();
-  const validCommands = ['play2', 'song2', 'music2', 'ytadoc2', 'ytmp3doc2', 'sing3', 'dlsong2'];
+
+  const validCommands = ['play'];
 
   if (validCommands.includes(cmd)) {
     if (!text) {
-      await m.reply(`Hello _*${m.pushName}*_ , Please provide the song name or YouTube URL, eg *.play2 Spectre by Alan Walker* or *.play2 https://www.youtube.com/watch?v=abc123*`);
-      return;
+      return m.reply('*Please provide a search query*');
     }
 
     try {
-      await m.React('🕘');
-      await m.reply(`A moment, *Gifted-Md* is Processing from GiftedAPi...`);
+      await m.React("🎥");
 
-      let videoUrl = text;
-      let videos = [];
-      let fileInfo = {};
+      const searchResults = await ytSearch(text);
+      const videos = searchResults.videos.slice(0, 5);
 
-      // Check if the provided text is a valid YouTube URL
-      const urlPattern = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/.+$/;
-      const isUrl = urlPattern.test(text);
+      if (videos.length === 0) {
+        m.reply('No results found.');
+        await m.React("❌");
+        return;
+      }
 
-      if (!isUrl) {
-        // Perform YouTube search to get the video URL
-        const search = await yts(text);
-        videos = search.videos;
+      videos.forEach((video, index) => {
+        const uniqueId = searchIndex + index;
+        searchResultsMap.set(uniqueId, video);
+      });
 
-        if (videos && videos.length > 0 && videos[0]) {
-          videoUrl = videos[0].url;
-        } else {
-          await m.reply('No audios found.');
-          return;
+      const currentResult = searchResultsMap.get(searchIndex);
+      const buttons = [
+        {
+          "name": "quick_reply",
+          "buttonParamsJson": JSON.stringify({
+            display_text: "🎧 AUDIO",
+            id: `media_audio_${searchIndex}`
+          })
+        },
+        {
+          "name": "quick_reply",
+          "buttonParamsJson": JSON.stringify({
+            display_text: "🎥 VIDEO",
+            id: `media_video_${searchIndex}`
+          })
+        },
+        {
+          "name": "quick_reply",
+          "buttonParamsJson": JSON.stringify({
+            display_text: "🎵 AUDIO DOCUMENT",
+            id: `media_audiodoc_${searchIndex}`
+          })
+        },
+        {
+          "name": "quick_reply",
+          "buttonParamsJson": JSON.stringify({
+            display_text: "🎦 VIDEO DOCUMENT",
+            id: `media_videodoc_${searchIndex}`
+          })
+        },
+        {
+          "name": "quick_reply",
+          "buttonParamsJson": JSON.stringify({
+            display_text: "⏩ NEXT",
+            id: `next_${searchIndex + 1}`
+          })
+        }
+      ];
+
+      const thumbnailUrl = currentResult.thumbnail;
+      const url = `https://www.youtube.com/watch?v=${currentResult.videoId}`;
+
+      const msg = generateWAMessageFromContent(m.from, {
+        viewOnceMessage: {
+          message: {
+            messageContextInfo: {
+              deviceListMetadata: {},
+              deviceListMetadataVersion: 2
+            },
+            interactiveMessage: proto.Message.InteractiveMessage.create({
+              body: proto.Message.InteractiveMessage.Body.create({
+                text: `*_ᴇᴠɪʟ-ᴍᴅ ʏᴏᴜᴛᴜʙᴇ sᴇᴀʀᴄʜ_*🔎
+╭────────────────────━┈⊷
+│▸ℹ️ *TITLE:*  ${currentResult.title}
+│▸👤 *AUTHOR:* ${currentResult.author.name}
+│▸👁️‍🗨️ *VIEWS:* ${currentResult.views}
+│▸🕘 *DURATION:* ${currentResult.timestamp}
+│▸🔗 *YTLINK:* ${url}
+╰────────────────────━┈⊷`
+              }),
+              footer: proto.Message.InteractiveMessage.Footer.create({
+                text: "*_───•◈ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴇᴠɪʟ ᴍᴅ²⁰²⁴◈•───_*"
+              }),
+              header: proto.Message.InteractiveMessage.Header.create({
+                ...(await prepareWAMessageMedia({ image: { url: thumbnailUrl } }, { upload: Matrix.waUploadToServer })),
+                title: "",
+                gifPlayback: true,
+                subtitle: "",
+                hasMediaAttachment: false 
+              }),
+              nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
+                buttons
+              }),
+              contextInfo: {
+                mentionedJid: [m.sender],
+                forwardingScore: 9999,
+                isForwarded: true,
+              }
+            }),
+          },
+        },
+      }, {});
+
+      await Matrix.relayMessage(msg.key.remoteJid, msg.message, {
+        messageId: msg.key.id
+      });
+      await m.React("✅");
+
+      searchIndex += 1;
+    } catch (error) {
+      console.error("Error processing your request:", error);
+      m.reply('Download your request.✅');
+      await m.React("✅");
+    }
+  } else if (selectedId) {
+    if (selectedId.startsWith('next_')) {
+      const nextIndex = parseInt(selectedId.replace('next_', ''));
+      const currentResult = searchResultsMap.get(nextIndex);
+
+      if (!currentResult) {
+        return m.reply('No more results.');
+      }
+      const buttons = [
+        {
+          "name": "quick_reply",
+          "buttonParamsJson": JSON.stringify({
+            display_text: "🎧 AUDIO",
+            id: `media_audio_${nextIndex}`
+          })
+        },
+        {
+          "name": "quick_reply",
+          "buttonParamsJson": JSON.stringify({
+            display_text: "🎥 VIDEO",
+            id: `media_video_${nextIndex}`
+          })
+        },
+        {
+          "name": "quick_reply",
+          "buttonParamsJson": JSON.stringify({
+            display_text: "🎵 AUDIO DOCUMENT",
+            id: `media_audiodoc_${nextIndex}`
+          })
+        },
+        {
+          "name": "quick_reply",
+          "buttonParamsJson": JSON.stringify({
+            display_text: "🎦 VIDEO DOCUMENT",
+            id: `media_videodoc_${nextIndex}`
+          })
+        },
+        {
+          "name": "quick_reply",
+          "buttonParamsJson": JSON.stringify({
+            display_text: "⏩ NEXT",
+            id: `next_${nextIndex + 1}`
+          })
+        }
+      ];
+
+      const thumbnailUrl = currentResult.thumbnail;
+      const url = `https://www.youtube.com/watch?v=${currentResult.videoId}`;
+
+      const msg = generateWAMessageFromContent(m.from, {
+        viewOnceMessage: {
+          message: {
+            messageContextInfo: {
+              deviceListMetadata: {},
+              deviceListMetadataVersion: 2
+            },
+            interactiveMessage: proto.Message.InteractiveMessage.create({
+              body: proto.Message.InteractiveMessage.Body.create({
+                text: `*_ᴇᴠɪʟ-ᴍᴅ ʏᴏᴜᴛᴜʙᴇ sᴇᴀʀᴄʜ_*🔎
+╭────────────────────━┈⊷
+│▸ℹ️ *TITLE:*  ${currentResult.title}
+│▸👤 *AUTHOR:* ${currentResult.author.name}
+│▸👁️‍🗨️ *VIEWS:* ${currentResult.views}
+│▸🕘 *DURATION:* ${currentResult.timestamp}
+│▸🔗 *YTLINK:* ${url}
+╰────────────────────━┈⊷`
+              }),
+              footer: proto.Message.InteractiveMessage.Footer.create({
+                text: "*_───•◈ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴇᴠɪʟ ᴍᴅ²⁰²⁴◈•───_*"
+              }),
+              header: proto.Message.InteractiveMessage.Header.create({
+                ...(await prepareWAMessageMedia({ image: { url: thumbnailUrl } }, { upload: Matrix.waUploadToServer })),
+                title: "",
+                gifPlayback: true,
+                subtitle: "",
+                hasMediaAttachment: false 
+              }),
+              nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
+                buttons
+              }),
+              contextInfo: {
+                mentionedJid: [m.sender],
+                forwardingScore: 9999,
+                isForwarded: true,
+              }
+            }),
+          },
+        },
+      }, {});
+
+      await Matrix.relayMessage(msg.key.remoteJid, msg.message, {
+        messageId: msg.key.id
+      });
+    } else if (selectedId.startsWith('media_')) {
+      const parts = selectedId.split('_');
+      const type = parts[1];
+      const key = parseInt(parts[2]);
+      const selectedMedia = searchResultsMap.get(key);
+
+      if (selectedMedia) {
+        try {
+          const videoUrl = selectedMedia.url;
+          let finalMediaBuffer, mimeType, content;
+
+          const stream = ytdl(videoUrl, { filter: type === 'audio' || type === 'audiodoc' ? 'audioonly' : 'videoandaudio' });
+
+          finalMediaBuffer = await getStreamBuffer(stream);
+          mimeType = type === 'audio' || type === 'audiodoc' ? 'audio/mpeg' : 'video/mp4';
+
+          if (type === 'audio') {
+            content = {
+              audio: finalMediaBuffer,
+              mimetype: 'audio/mpeg',
+              ptt: false,
+              waveform: [100, 0, 100, 0, 100, 0, 100],
+              fileName: `${selectedMedia.title}.mp3`,
+              contextInfo: {
+                mentionedJid: [m.sender],
+                externalAdReply: {
+                  title: "↺ |◁   II   ▷|   ♡",
+                  body: `Now playing: ${selectedMedia.title}`,
+                  thumbnailUrl: selectedMedia.thumbnail,
+                  sourceUrl: videoUrl,
+                  mediaType: 1,
+                  renderLargerThumbnail: true
+                }
+              }
+            };
+            await Matrix.sendMessage(m.from, content, { quoted: m });
+          } else if (type === 'video') {
+            content = {
+              video: finalMediaBuffer,
+              mimetype: mimeType,
+              caption: `╭────────────────────━┈⊷
+│▸ℹ️ *TITLE:* ${selectedMedia.title}
+╰────────────────────━┈⊷> *_───•◈ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴇᴠɪʟ ᴍᴅ²⁰²⁴◈•───_*`
+            };
+            await Matrix.sendMessage(m.from, content, { quoted: m });
+          } else if (type === 'audiodoc' || type === 'videodoc') {
+            content = {
+              document: finalMediaBuffer,
+              mimetype: mimeType,
+              fileName: `${selectedMedia.title}.${type === 'audiodoc' ? 'mp3' : 'mp4'}`,
+              caption: `> *_───•◈ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴇᴠɪʟ ᴍᴅ²⁰²⁴◈•───_*`,
+              contextInfo: {
+                externalAdReply: {
+                  showAdAttribution: true,
+                  title: selectedMedia.title,
+                  body: 'EVIL-MD',
+                  thumbnailUrl: selectedMedia.thumbnail,
+                  sourceUrl: selectedMedia.url,
+                  mediaType: 1,
+                  renderLargerThumbnail: true
+                }
+              }
+            };
+            await Matrix.sendMessage(m.from, content, { quoted: m });
+          }
+        } catch (error) {
+          console.error("Error processing your request:", error);
+          m.reply('Download your request.');
+          await m.React("✅");
         }
       }
-
-      // Call the API endpoint with the video URL
-      const apiResponse = await fetch(`https://api.prabath-md.tech/api/ytmp3?url=${encodeURIComponent(videoUrl)}`);
-      const apiResult = await apiResponse.json();
-
-      if (apiResult.status === 'success ✅') {
-        const audioUrl = apiResult.data.download;
-        fileInfo = {
-          title: apiResult.data.title,
-          fileSize: apiResult.data.file_size,
-          quality: apiResult.data.quality
-        };
-
-        let infoMess = {
-          image: { url: isUrl ? 'https://telegra.ph/file/c2a4d8d65722553da4c89.jpg' : videos[0].thumbnail },
-          caption: `*𝐆𝐈𝐅𝐓𝐄𝐃-𝐌𝐃 𝐒𝐎𝐍𝐆 𝐃𝐎𝐖𝐍𝐋𝐎𝐀𝐃𝐄𝐑*\n
-╭───────────────◆
-│⿻ *Title:* ${fileInfo.title}
-│⿻ *File Size:* ${fileInfo.fileSize}
-│⿻ *Quality:* ${fileInfo.quality}
-${!isUrl ? `│⿻ *Duration:* ${videos[0].timestamp}` : ''}
-${!isUrl ? `│⿻ *Viewers:* ${videos[0].views}` : ''}
-${!isUrl ? `│⿻ *Uploaded:* ${videos[0].ago}` : ''}
-${!isUrl ? `│⿻ *Artist:* ${videos[0].author.name}` : ''}
-╰────────────────◆
-⦿ *Direct Yt Link:* ${videoUrl}
-
-╭────────────────◆
-│ *©𝟐𝟎𝟐𝟒 𝐆𝐈𝐅𝐓𝐄𝐃 𝐌𝐃 𝐕𝟓*
-╰─────────────────◆`
-        };
-        
-        await Gifted.sendMessage(m.from, infoMess, { quoted: m });
-
-        // Send the normal audio file with additional caption and metadata
-        await Gifted.sendMessage(m.from, {
-          audio: { url: audioUrl },
-          mimetype: 'audio/mp4',
-          caption: `NORMAL AUDIO FORMAT\n\n> *©𝟐𝟎𝟐𝟒 𝐆𝐈𝐅𝐓𝐄𝐃 𝐌𝐃 𝐕𝟓*`,
-          contextInfo: {
-            externalAdReply: {
-              showAdAttribution: false,
-              title: fileInfo.title,
-              body: 'Powered by Gifted Tech',
-              thumbnailUrl: 'https://telegra.ph/file/c2a4d8d65722553da4c89.jpg',
-              sourceUrl: 'https://whatsapp.com/channel/0029VaYauR9ISTkHTj4xvi1l',
-              mediaType: 1,
-              renderLargerThumbnail: false
-            }
-          }
-        }, { quoted: m });
-
-        // Send the document audio file with additional caption and metadata
-        await Gifted.sendMessage(m.from, {
-          document: { url: audioUrl },
-          mimetype: 'audio/mp4',
-          fileName: `${fileInfo.title}.mp4`,
-          caption: `DOCUMENT AUDIO FORMAT\n\n> *©𝟐𝟎𝟐𝟒 𝐆𝐈𝐅𝐓𝐄𝐃 𝐌𝐃 𝐕𝟓*`,
-          contextInfo: {
-            externalAdReply: {
-              showAdAttribution: false,
-              title: fileInfo.title,
-              body: 'Powered by Gifted Tech',
-              thumbnailUrl: 'https://telegra.ph/file/c2a4d8d65722553da4c89.jpg',
-              sourceUrl: 'https://whatsapp.com/channel/0029VaYauR9ISTkHTj4xvi1l',
-              mediaType: 1,
-              renderLargerThumbnail: false
-            }
-          }
-        }, { quoted: m });
-
-        console.log("Sending audio and document file completed!");
-
-        await m.React('✅');
-        await m.reply(`Download Success...\nSent All Audio Format For: *${fileInfo.title}*`);
-      } else {
-        await m.reply('Failed to download audio. Please try again later.');
-      }
-    } catch (error) {
-      console.error('Error from Gifted API:', error);
-      await Gifted.sendMessage(m.from, { text: "Failed with error from Gifted API. Please try again later." });
     }
   }
 };
 
-export default Play;
+const getStreamBuffer = async (stream) => {
+  const chunks = [];
+  return new Promise((resolve, reject) => {
+    stream.on('data', chunk => chunks.push(chunk));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', err => reject(err));
+  });
+};
+
+export default playcommand;
